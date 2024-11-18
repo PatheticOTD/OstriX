@@ -34,13 +34,13 @@ double simpson_integral(double a, double b, int n) {
 
 // Аналитическое значение интеграла для сравнения
 double analytical_integral() {
-    return 7.0;
+    return 21.0;
 }
 
 int main() {
     double a = 1e-10;          // Нижний предел интегрирования (очень малое число вместо 0)
     double b = 1.0;           // Верхний предел интегрирования
-    long int n = 5000000000;           // Число шагов (чётное для метода Симпсона)
+    long int n = 50000000;           // Число шагов (чётное для метода Симпсона)
 
     std::cout << std::fixed << std::setprecision(8);
 
