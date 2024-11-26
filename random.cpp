@@ -3,132 +3,146 @@
 #include <random>
 #include <cmath>
 #include <cstdlib>
-
+#include <functional>
+//#include <vector>
+//#include <system.> 
 using namespace std;
 
-double normal_distribution_func(double x, double mu, double sigma) {
-    return (1.0 / (sigma * sqrt(2 * M_PI))) * exp(-0.5 * pow((x - mu) / sigma, 2));
-}
-void generate_norm_plot(const string& filename, int num_points, double mean, double stddev, double min_x, double max_x){
-    ofstream file(filename);
-    if (!file) {
-        cerr << "Ошибка открытия файла: " << filename << endl;
+void writePointsToFile(const string &filename, const vector<pair<double, double>> &points)
+{
+    ofstream outFile(filename);
+    if (!outFile)
+    {
+        cerr << "Ошибка записи в файл: " << filename << endl;
         return;
     }
 
-    random_device rd;
-    mt19937 gen(rd());
-    uniform_real_distribution<> dist(min_x, max_x);
-
-    for (int i = 0; i < num_points; ++i) {
-        double x = dist(gen);
-        double y = dist(gen);
-        file << normal_distribution_func(x, mean, stddev) << " " << x << "\n";
+    for (const auto &[x, y] : points)
+    {
+        outFile << x << " " << y << "\n";
     }
-
-    file.close();
+    outFile.close();
+    cout << "Данные сохранены в файл: " << filename << "\n";
 }
 
-void generate_uniform_points(const string& filename, int num_points) {
-    ofstream file(filename);
-    if (!file) {
-        cerr << "Ошибка открытия файла: " << filename << endl;
-        return;
-    }
-
+// Генерация равномерного распределения
+vector<pair<double, double>> generate_uniform(int num_points)
+{
     random_device rd;
     mt19937 gen(rd());
-    uniform_real_distribution<> dist(0.0, 1.0);
+    uniform_real_distribution<> dis(0.0, 1.0);
 
-    for (int i = 0; i < num_points; ++i) {
-        double x = dist(gen);
-        double y = dist(gen);
-        file << x << " " << y << "\n";
+    vector<pair<double, double>> points;
+    for (int i = 0; i < num_points; ++i)
+    {
+        points.emplace_back(dis(gen), dis(gen));
     }
-
-    file.close();
+    return points;
 }
-void generate_normal_points_a(const string& filename, int num_points, double mean, double stddev) {
-    ofstream file(filename);
-    if (!file) {
-        cerr << "Ошибка открытия файла: " << filename << endl;
-        return;
-    }
 
+// A
+vector<pair<double, double>> generate_norm_dist_A(int num_points, double mean, double stddev)
+{
     random_device rd;
     mt19937 gen(rd());
-    uniform_real_distribution<> dist(.0, 1.);
-    for (int i = 0; i < num_points / 2; ++i) {
-        double u1 = dist(gen);
-        double u2 = dist(gen);
+    uniform_real_distribution<> dis(0.0, 1.0);
+
+    vector<pair<double, double>> points;
+    for (int i = 0; i < num_points / 2; ++i)
+    {
+        double u1 = dis(gen);
+        double u2 = dis(gen);
+
         double z0 = sqrt(-2.0 * log(u1)) * cos(2.0 * M_PI * u2);
         double z1 = sqrt(-2.0 * log(u1)) * sin(2.0 * M_PI * u2);
 
-        file <<dist(gen) << ' '<< z0 * stddev + mean<<'\n'
-        <<dist(gen)<< ' '<<z1 * stddev + mean<<'\n';
+        points.emplace_back(dis(gen), mean + z0 * stddev);
+        points.emplace_back(dis(gen), mean + z1 * stddev);
     }
-
-    file.close();
+    return points;
 }
 
-void generate_normal_points_b(const string& filename, int num_points, double mean, double stddev) {
-    ofstream file(filename);
-    if (!file) {
-        cerr << "Ошибка открытия файла: " << filename << endl;
-        return;
-    }
-
+// D
+vector<pair<double, double>> generate_norm_dist_B(int num_points, double mean, double stddev)
+{
     random_device rd;
     mt19937 gen(rd());
     uniform_real_distribution<> dist(-1.0, 1.0);
-    for (int i = 0; i < num_points / 2; ++i) {
-        double u1 = dist(gen);
-        double u2 = dist(gen);
-        double s = u1*u1 + u2*u2;
-        double z0 = u1 * sqrt(-2.0 * log(s) / s);
-        double z1 = u2 * sqrt(-2.0 * log(s) / s);
 
-        file <<dist(gen) << ' '<< z0 * stddev + mean<<'\n'
-        <<dist(gen)<< ' '<<z1 * stddev + mean<<'\n';
+    vector<pair<double, double>> points;
+    int count = 0;
+    while (count < num_points)
+    {
+        double u1 = dist(gen);
+        double u2 = dist(gen); 
+        double s = u1 * u1 + u2 * u2;
+
+        if (s > 0 && s < 1)
+        {
+            double z0 = u1 * sqrt(-2.0 * log(s) / s);
+            double z1 = u2 * sqrt(-2.0 * log(s) / s);
+
+            points.emplace_back(dist(gen), mean + z0 * stddev);
+            points.emplace_back(dist(gen), mean + z1 * stddev);
+            count += 2;
+        }
     }
-    file.close();
+    return points;
 }
 
-void gnuplot_script()
+// Создание скрипта для gnuplot
+void createGnuplotScript(const string &scriptFile,
+                         const vector<string> &dataFiles,
+                         const vector<string> &titles,
+                         const vector<string> &colors,
+                         const vector<int> &pointTypes)
 {
-    ofstream script("plot_all.gp");
+    ofstream script(scriptFile);
+    if (!script)
+    {
+        cerr << "Ошибка создания скрипта: " << scriptFile << endl;
+        return;
+    }
 
-    script << "set term wxt size 1800,600\n"; //  making window
-    script << "set multiplot layout 1,4 title 'Distributions'\n"; // making row of 3 plots
+    script << "set terminal wxt size 1800,600\n";
+    script << "set multiplot layout 1," << dataFiles.size() << " title 'Распределения точек'\n";
+    script << "set pointsize 0.5\n";
+    script << "set style data points\n";
 
-    script << "set title 'Uniform Distribution'\n";
-    script << "plot 'uniform_points.txt' using 1:2 with points pointtype 7 pointsize 0.5 linecolor rgb 'red'\n";
+    for (size_t i = 0; i < dataFiles.size(); ++i)
+    {
+        script << "set title '" << titles[i] << "'\n";
+        script << "plot '" << dataFiles[i] << "' using 1:2 with points pt " << pointTypes[i]
+               << " lc '" << colors[i] << "' notitle\n";
+    }
 
-    script << "set title 'Normal Distribution A'\n";
-    script << "plot 'normal_points_a.txt' using 1:2 with points pointtype 7 pointsize 0.5 linecolor rgb 'blue'\n";
-
-    script << "set title 'Normal Distribution B'\n";
-    script << "plot 'normal_points_b.txt' using 1:2 with points pointtype 7 pointsize 0.5\n";
-
-    script << "set title 'Normal Distribution plot'\n";
-    script << "plot 'normal_plot.txt' using 1:2 with points pointtype 7 pointsize 0.5 linecolor rgb 'blue'\n";
-    // Завершаем multiplot
     script << "unset multiplot\n";
-
     script.close();
 }
 
 int main() {
-    const int num_points = 10000;
+    int num_points = 10000;
 
+    // Генерация и запись данных
+    auto uniformPoints = generate_uniform(num_points);
+    writePointsToFile("uniform_points.txt", uniformPoints);
 
-    generate_uniform_points("uniform_points.txt", num_points);
+    auto normalPointsA = generate_norm_dist_A(num_points, 0.0, 1.0);
+    writePointsToFile("normal_points_a.txt", normalPointsA);
 
-    generate_normal_points_a("normal_points_a.txt", num_points, .0, 1.5);
-    generate_normal_points_b("normal_points_b.txt", num_points, 0, 1.5);
-    generate_norm_plot("normal_plot.txt", num_points, .0, 1.5, -6., 6.);
+    auto normalPointsB = generate_norm_dist_B(num_points, -1.0, 1.0);
+    writePointsToFile("normal_points_b.txt", normalPointsB);
 
-    gnuplot_script();
-    system("gnuplot -persist plot_all.gp");
+    // Создание и запуск gnuplot
+    vector<string> dataFiles = {"uniform_points.txt", "normal_points_a.txt", "normal_points_b.txt"};
+    vector<string> titles = {"Равномерное распределение", "Нормальное распределение (A)", "Нормальное распределение (B)"};
+    vector<string> colors = {"green", "blue", "orange"};
+    vector<int> pointTypes = {7, 7, 7};
+
+    createGnuplotScript("plot_script.gp", dataFiles, titles, colors, pointTypes);
+
+    cout << "Запуск графиков через gnuplot...\n";
+    system("gnuplot -persist plot_script.gp");
+
     return 0;
 }
