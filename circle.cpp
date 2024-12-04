@@ -1,100 +1,108 @@
 #include <iostream>
 #include <fstream>
-#include <vector>
-#include <random>
 #include <cmath>
+#include <random>
+#include <vector>
+#include <functional>
 #include <cstdlib>
 
-// Класс Circle
-class Circle {
-public:
-    Circle(double x, double y, double radius)
-        : x_(x), y_(y), radius_(radius) {}
+using namespace std;
 
-    // Метод проверки точки на вхождение
-    bool contains(double px, double py) const {
-        double distSquared = (px - x_) * (px - x_) + (py - y_) * (py - y_);
-        return distSquared <= radius_ * radius_;
-    }
+double monteCarloIntegral(double xMin, double xMax, double yMin, double yMax, int pointCount, 
+                          function<double(double)> graphFunc, 
+                          vector<pair<double, double>>& underCurvePoints, 
+                          vector<pair<double, double>>& aboveCurvePoints) {
+    random_device rd;
+    mt19937 generator(rd());
+    uniform_real_distribution<> xDistribution(xMin, xMax);
+    uniform_real_distribution<> yDistribution(yMin, yMax);
 
-private:
-    double x_, y_, radius_;
-};
+    int underCurveCount = 0;
 
-// Функция генерации точек
-std::vector<std::pair<double, double>> generatePoints(int numPoints, double minX, double maxX, double minY, double maxY) {
-    std::vector<std::pair<double, double>> points;
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<> disX(minX, maxX);
-    std::uniform_real_distribution<> disY(minY, maxY);
+    // Генерация точек
+    for (int i = 0; i < pointCount; ++i) {
+        double x = xDistribution(generator);
+        double y = yDistribution(generator);
 
-    for (int i = 0; i < numPoints; ++i) {
-        points.emplace_back(disX(gen), disY(gen));
-    }
-    return points;
-}
-
-// Функция создания Gnuplot-скрипта
-void createPlotScript(const Circle& circle, const std::vector<std::pair<double, double>>& points,
-     double circleX, double circleY, double circleRadius) {
-    std::ofstream plotScript("plot.gnuplot");
-    std::ofstream inCircle("in_circle.dat");
-    std::ofstream outCircle("out_circle.dat");
-
-    // Сохранение точек в файлы
-    for (const auto& point : points) {
-        if (circle.contains(point.first, point.second)) {
-            inCircle << point.first << " " << point.second << "\n";
+        if (y <= graphFunc(x)) {
+            underCurveCount++;
+            underCurvePoints.emplace_back(x, y);
         } else {
-            outCircle << point.first << " " << point.second << "\n";
+            aboveCurvePoints.emplace_back(x, y);
         }
     }
 
-    // Настройка Gnuplot-скрипта
-    plotScript << "set title 'Points and Circle'\n";
-    plotScript << "set size ratio -1\n";
-    plotScript << "set xrange [-10:10]\n";
-    plotScript << "set yrange [-10:10]\n";
-
-    // Построение окружности
-    plotScript << "set object 1 circle at " << circleX << "," << circleY
-               << " size " << circleRadius << " front fillstyle empty border lc rgb 'blue'\n";
-
-    // Построение точек
-    plotScript << "plot 'in_circle.dat' with points pt 7 lc rgb 'green' title 'Inside Circle', \\\n";
-    plotScript << "     'out_circle.dat' with points pt 7 lc rgb 'red' title 'Outside Circle'\n";
-
-    plotScript.close();
-    inCircle.close();
-    outCircle.close();
+    // Расчёт площади под графиком
+    double rectangleArea = (xMax - xMin) * (yMax - yMin);
+    return rectangleArea * static_cast<double>(underCurveCount) / pointCount;
 }
 
+// Функция для генерации Gnuplot-скрипта
+void generatePlotScript(const string& scriptName, double xMin, double xMax, double yMin, double yMax, 
+                        const vector<pair<double, double>>& underCurvePoints, 
+                        
+                        const vector<pair<double, double>>& aboveCurvePoints) {
+    ofstream scriptFile(scriptName);
+    ofstream underCurveFile("under_curve_points.dat");
+    ofstream aboveCurveFile("above_curve_points.dat");
 
+    // Сохранение точек под графиком
+    for (const auto& point : underCurvePoints) {
+        underCurveFile << point.first << " " << point.second << "\n";
+    }
+    underCurveFile.close();
 
-// Функция автоматического запуска Gnuplot
-void runGnuplot() {
-    int retCode = std::system("gnuplot -persist plot.gnuplot");
-    if (retCode != 0) {
-        std::cerr << "Ошибка: не удалось запустить Gnuplot. Убедитесь, что Gnuplot установлен и доступен в PATH.\n";
+    // Сохранение точек над графиком
+    for (const auto& point : aboveCurvePoints) {
+        aboveCurveFile << point.first << " " << point.second << "\n";
+    }
+    aboveCurveFile.close();
+
+    // Создание скрипта Gnuplot
+    scriptFile << "set title 'Random Area Estimation'\n";
+    scriptFile << "set xrange [" << xMin << ":" << xMax << "]\n";
+    scriptFile << "set yrange [" << yMin << ":" << yMax << "]\n";
+    scriptFile << "set size ratio -1\n";
+    scriptFile << "set xlabel 'X axis'\n";
+    scriptFile << "set ylabel 'Y axis'\n";
+    scriptFile << "plot 'under_curve_points.dat' using 1:2 with points pt 7 lc rgb 'green' title '', \\\n";
+    scriptFile << "     'above_curve_points.dat' using 1:2 with points pt 7 lc rgb 'red' title '', \\\n";
+    scriptFile << "     x**0.333 with lines lw 2 lc rgb 'blue'\n";
+    scriptFile.close();
+}
+
+// Функция для запуска Gnuplot
+void executeGnuplot(const string& scriptName) {
+    string command = "gnuplot -persist " + scriptName;
+    int resultCode = system(command.c_str());
+    if (resultCode != 0) {
+        cerr << "Ошибка: не удалось запустить Gnuplot. Убедитесь, что Gnuplot установлен.\n";
     }
 }
 
 int main() {
-    // Параметры окружности
-    double circleX = 0.0, circleY = 0.0, circleRadius = 8.0;
-    Circle circle(circleX, circleY, circleRadius);
+    double xMin = 0.0, xMax = 1.0, yMin = 0.0, yMax = 1.0;
+    int totalPoints = 100000;
 
-    // Генерация точек
-    int numPoints = 10000;
-    double minX = -10.0, maxX = 10.0, minY = -10.0, maxY = 10.0;
-    auto points = generatePoints(numPoints, minX, maxX, minY, maxY);
+    // Определение функций
+    auto graphFunc = [](double x) -> double { return pow(x, 1.0 / 3.0); };
+    auto exactSolution = []() -> double { return 3.0 / 4.0; };
 
-    // Создание Gnuplot-скрипта и данных
-    createPlotScript(circle, points, circleX = 0.0, circleY = 0.0, circleRadius = 8.0);
+    vector<pair<double, double>> underCurvePoints;
+    vector<pair<double, double>> aboveCurvePoints;
 
-    // Автоматический запуск Gnuplot
-    runGnuplot();
+    // Вычисление интеграла методом Монте-Карло
+    double estimatedArea = monteCarloIntegral(xMin, xMax, yMin, yMax, totalPoints, graphFunc, underCurvePoints, aboveCurvePoints);
+    double exactArea = exactSolution();
+    double errorPercentage = fabs((estimatedArea - exactArea) / exactArea) * 100.0;
+
+    cout << "Оценённая площадь под графиком: " << estimatedArea << "\n";
+    cout << "Аналитическая площадь под графиком: " << exactArea << "\n";
+    cout << "Относительная ошибка: " << errorPercentage << "%\n";
+
+    // Генерация графика
+    generatePlotScript("plot_graph.gnuplot", xMin, xMax, yMin, yMax, underCurvePoints, aboveCurvePoints);
+    executeGnuplot("plot_graph.gnuplot");
 
     return 0;
 }
