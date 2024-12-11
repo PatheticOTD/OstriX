@@ -6,11 +6,11 @@ using namespace std;
 
 class Triangle {
 private:
-    double vertex1_x, vertex1_y; // Координаты первой вершины
-    double vertex2_x, vertex2_y; // Координаты второй вершины
-    double vertex3_x, vertex3_y; // Координаты третьей вершины
+    double vertex1_x, vertex1_y; // Координаты 
+    double vertex2_x, vertex2_y; 
+    double vertex3_x, vertex3_y; 
 
-    // Вспомогательная функция для вычисления расстояния между двумя точками
+    //функция для вычисления расстояния между двумя точками
     double calculateDistance(double point1_x, double point1_y, double point2_x, double point2_y) const {
         return sqrt(pow(point2_x - point1_x, 2) + pow(point2_y - point1_y, 2));
     }
@@ -21,11 +21,10 @@ public:
             : vertex1_x(coord1_x), vertex1_y(coord1_y),
               vertex2_x(coord2_x), vertex2_y(coord2_y),
               vertex3_x(coord3_x), vertex3_y(coord3_y) {
-        // Проверка, являются ли точки коллинеарными (площадь = 0)
-        if (calculateArea() == 0) {
+        if (calculateArea() == 0 || calculateArea() == NULL) {
             throw invalid_argument("Вершины треугольника не должны быть коллинеарными.");
         }
-    }
+    } 
 
     // Метод для вычисления периметра
     double calculatePerimeter() const {
@@ -54,12 +53,8 @@ public:
 };
 
 int main() {
-    try {
         // Пример использования
-        Triangle triangle(0, 0, 3, 0, 0, 4);
+        Triangle triangle(0, 0, 1, 1, 4, 4);
         triangle.displayProperties();
-    } catch (const exception& error) {
-        cerr << "Ошибка: " << error.what() << "\n";
-    }
     return 0;
 }
