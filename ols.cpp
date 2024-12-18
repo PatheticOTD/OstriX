@@ -1,97 +1,102 @@
 #include <iostream>
-#include <cmath>
 #include <vector>
+#include <cmath>
 
 using namespace std;
 
-const double TOL = 1e-6;           // Точность
-const int MAX_ITER = 100;          // Максимум итераций
-const double C = 299792.458;       // Скорость света (км/с)
-
-// Структура для хранения координат спутника и псевдодальности
+// Структура для хранения псевдодальности и координат спутников
 struct Satellite {
-    double r, x, y, z;
+    double rho;      // Псевдодальность
+    double x, y, z;  // Координаты спутника
 };
 
 // Функция для вычисления расстояния между точками
-double distance(double x1, double y1, double z1, double x2, double y2, double z2) {
+double calcDistance(double x1, double y1, double z1, double x2, double y2, double z2) {
     return sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2) + (z1 - z2) * (z1 - z2));
 }
 
-// Решение системы линейных уравнений методом Гаусса
-void gaussSolve(vector<vector<double>> A, vector<double>& b, vector<double>& x) {
-    int n = b.size();
+// Функция для решения системы линейных уравнений методом Гаусса
+vector<double> solveLinearSystem(vector<vector<double>> A, vector<double> b) {
+    int n = A.size();
     for (int i = 0; i < n; ++i) {
-        for (int j = i + 1; j < n; ++j) {
-            double ratio = A[j][i] / A[i][i];
-            for (int k = i; k < n; ++k) {
-                A[j][k] -= ratio * A[i][k];
-            }
-            b[j] -= ratio * b[i];
+        // Нормализация текущей строки
+        double diag = A[i][i];
+        for (int j = 0; j < n; ++j) A[i][j] /= diag;
+        b[i] /= diag;
+
+        // Прямой ход метода Гаусса
+        for (int k = i + 1; k < n; ++k) {
+            double factor = A[k][i];
+            for (int j = 0; j < n; ++j) A[k][j] -= factor * A[i][j];
+            b[k] -= factor * b[i];
         }
     }
 
+    // Обратный ход
+    vector<double> x(n);
     for (int i = n - 1; i >= 0; --i) {
         x[i] = b[i];
-        for (int j = i + 1; j < n; ++j) {
-            x[i] -= A[i][j] * x[j];
+        for (int j = i + 1; j < n; ++j) x[i] -= A[i][j] * x[j];
+    }
+    return x;
+}
+
+// Функция для решения навигационной задачи методом Ньютона
+vector<double> solveNavigation(vector<Satellite> satellites, vector<double> X, double tolerance, int max_iterations) {
+    const double c = 299792458.0;  // Скорость света (м/с)
+
+    for (int iter = 0; iter < max_iterations; ++iter) {
+        vector<double> delta_rho(satellites.size());
+        vector<vector<double>> H(satellites.size(), vector<double>(4));
+
+        for (size_t i = 0; i < satellites.size(); ++i) {
+            double dx = X[0] - satellites[i].x;
+            double dy = X[1] - satellites[i].y;
+            double dz = X[2] - satellites[i].z;
+            double r = calcDistance(X[0], X[1], X[2], satellites[i].x, satellites[i].y, satellites[i].z);
+
+            delta_rho[i] = satellites[i].rho - (r + X[3]);
+
+            // Заполняем матрицу H
+            H[i][0] = dx / r;
+            H[i][1] = dy / r;
+            H[i][2] = dz / r;
+            H[i][3] = 1.0;  // Производная по времени
         }
-        x[i] /= A[i][i];
-    }
-}
 
-// Вычисление вектора невязок F(x)
-vector<double> computeF(const vector<Satellite>& sats, const vector<double>& x) {
-    vector<double> F(sats.size());
-    for (size_t i = 0; i < sats.size(); ++i) {
-        double dist = distance(x[0], x[1], x[2], sats[i].x, sats[i].y, sats[i].z);
-        F[i] = dist + C * x[3] - sats[i].r; // Учёт скорости света
-    }
-    return F;
-}
+        // Вычисляем H^T * H и H^T * delta_rho
+        vector<vector<double>> HTH(4, vector<double>(4, 0));
+        vector<double> HTdR(4, 0);
 
-// Вычисление матрицы Якоби H
-vector<vector<double>> computeJacobian(const vector<Satellite>& sats, const vector<double>& x) {
-    size_t n = sats.size();
-    vector<vector<double>> H(n, vector<double>(4));
-    for (size_t i = 0; i < n; ++i) {
-        double dist = distance(x[0], x[1], x[2], sats[i].x, sats[i].y, sats[i].z);
-        H[i][0] = (x[0] - sats[i].x) / dist; // Производная по x
-        H[i][1] = (x[1] - sats[i].y) / dist; // Производная по y
-        H[i][2] = (x[2] - sats[i].z) / dist; // Производная по z
-        H[i][3] = C;                        // Производная по b с учётом скорости света
-    }
-    return H;
-}
-
-// Умножение транспонированной H на H: H^T * H
-vector<vector<double>> multiplyHtH(const vector<vector<double>>& H) {
-    size_t rows = H.size(), cols = H[0].size();
-    vector<vector<double>> HtH(cols, vector<double>(cols, 0));
-    for (size_t i = 0; i < cols; ++i) {
-        for (size_t j = 0; j < cols; ++j) {
-            for (size_t k = 0; k < rows; ++k) {
-                HtH[i][j] += H[k][i] * H[k][j];
+        for (size_t i = 0; i < satellites.size(); ++i) {
+            for (int j = 0; j < 4; ++j) {
+                HTdR[j] += H[i][j] * delta_rho[i];
+                for (int k = 0; k < 4; ++k) {
+                    HTH[j][k] += H[i][j] * H[i][k];
+                }
             }
         }
-    }
-    return HtH;
-}
 
-// Умножение транспонированной H на F: H^T * F
-vector<double> multiplyHtF(const vector<vector<double>>& H, const vector<double>& F) {
-    size_t rows = H.size(), cols = H[0].size();
-    vector<double> HtF(cols, 0);
-    for (size_t i = 0; i < cols; ++i) {
-        for (size_t j = 0; j < rows; ++j) {
-            HtF[i] += H[j][i] * F[j];
+        // Решаем систему линейных уравнений: H^T * H * delta_X = H^T * delta_rho
+        vector<double> delta_X = solveLinearSystem(HTH, HTdR);
+
+        // Обновляем параметры
+        for (int i = 0; i < 4; ++i) X[i] += delta_X[i];
+
+        // Проверка на сходимость
+        double norm = 0;
+        for (double val : delta_X) norm += val * val;
+        if (sqrt(norm) < tolerance) {
+            cout << "Сходимость достигнута на итерации " << iter + 1 << endl;
+            break;
         }
     }
-    return HtF;
+    return X;  // Возвращаем решение
 }
 
 int main() {
-    vector<Satellite> sats = {
+    // Входные данные: координаты спутников и псевдодальности
+    vector<Satellite> satellites = {
         {20753, 14952, 17934, 10307},
         {20523, -2082, 11452, 22695},
         {21749, 11196, -11301, 19967},
@@ -99,39 +104,22 @@ int main() {
         {22904, 6433, -23618, 7272}
     };
 
-    vector<double> x = {0, 0, 0, 0}; // Начальное приближение
-    cout << "Начинаем итерации метода Ньютона с учётом скорости света...\n";
+    // Начальное приближение: (x, y, z, Δτ)
+    vector<double> initial_guess = {0, 0, 0, 0};
 
-    for (int iter = 0; iter < MAX_ITER; ++iter) {
-        vector<double> F = computeF(sats, x);
-        vector<vector<double>> H = computeJacobian(sats, x);
+    // Задаём параметры
+    double tolerance = 1e-10;
+    int max_iterations = 10000;
+    // Решаем навигационную задачу
+    vector<double> result = solveNavigation(satellites, initial_guess, tolerance, max_iterations);
 
-        vector<vector<double>> HtH = multiplyHtH(H);
-        vector<double> HtF = multiplyHtF(H, F);
-
-        vector<double> deltaX(4, 0);
-        for (auto& val : HtF) val = -val;
-        gaussSolve(HtH, HtF, deltaX);
-
-        for (size_t i = 0; i < x.size(); ++i) x[i] += deltaX[i];
-
-        double norm = 0.0;
-        for (double val : deltaX) norm += val * val;
-        norm = sqrt(norm);
-
-        cout << "Итерация " << iter + 1 << ": x = ";
-        for (double xi : x) cout << xi << " ";
-        cout << "\n";
-
-        if (norm < TOL) {
-            cout << "Решение найдено:\n";
-            break;
-        }
-    }
-
-    cout << "Координаты приёмника: x = " << x[0] << ", y = " << x[1] << ", z = " << x[2] << "\n";
-    cout << "Временная поправка b = " << x[3] << " секунд\n";
-    cout << "Поправка в расстоянии = " << C * x[3] << " км\n";
+    // Вывод результатов в main
+    const double c = 299792458.0;  // Скорость света (м/с)
+    cout << "Решение навигационной задачи:" << endl;
+    cout << "x = " << result[0] << " м" << endl;
+    cout << "y = " << result[1] << " м" << endl;
+    cout << "z = " << result[2] << " м" << endl;
+    cout << "Сдвиг времени Δτ = " << result[3] / c << " с" << endl;
 
     return 0;
 }
