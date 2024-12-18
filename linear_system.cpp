@@ -21,26 +21,30 @@ void displayMatrix(const Matrix &matrix, const Vector &rhs) {
     cout << endl;
 }
 
-// Прямой ход метода Гаусса
+// Прямой ход метода Гаусса с выбором главного элемента
 void forwardElimination(Matrix &matrix, Vector &rhs) {
     size_t size = matrix.size();
 
     for (size_t pivot = 0; pivot < size; ++pivot) {
-        // Поиск строки с максимальным элементом в текущем столбце
-        size_t maxRow = pivot;
-        for (size_t row = pivot + 1; row < size; ++row) {
-            if (fabs(matrix[row][pivot]) > fabs(matrix[maxRow][pivot])) {
-                maxRow = row;
+        // Поиск максимального элемента в подматрице
+        size_t maxRow = pivot, maxCol = pivot;
+        double maxValue = fabs(matrix[pivot][pivot]);
+
+        for (size_t row = pivot; row < size; ++row) {
+            for (size_t col = pivot; col < size; ++col) {
+                if (fabs(matrix[row][col]) > maxValue) {
+                    maxValue = fabs(matrix[row][col]);
+                    maxRow = row;
+                    maxCol = col;
+                }
             }
         }
 
-        // Обмен строк
+        // Перестановка строк и столбцов
         swap(matrix[pivot], matrix[maxRow]);
         swap(rhs[pivot], rhs[maxRow]);
-
-        // Проверка на вырожденность
-        if (fabs(matrix[pivot][pivot]) < 1e-12) {
-            throw runtime_error("Матрица вырождена или близка к вырожденной.");
+        for (size_t row = 0; row < size; ++row) {
+            swap(matrix[row][pivot], matrix[row][maxCol]);
         }
 
         // Нормализация строки
@@ -78,7 +82,7 @@ Vector backwardSubstitution(const Matrix &matrix, const Vector &rhs) {
 }
 
 int main() {
-    size_t size = 4; // Размер системы
+    size_t size = 15; // Размер системы
 
     // Генерация матрицы Гильберта
     Matrix matrix(size, Vector(size));
